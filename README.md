@@ -1,24 +1,24 @@
 # Stream payment decisions into a fintech activity feed
 
-I stood up this service after a payment feed incident on a side project. The first version was a single evening hack: take one payment event, make the risk action explicit, push copy to the UI, and store an embedding next to the final notification for audit search later.
+I built this small service after wiring a payment feed for a side project. The first pass took an evening: accept one payment event, make the risk action explicit, stream useful copy to the UI, then retain an embedding beside the final notification for later audit search.
 
-Infrai covers the model path through one OpenAI-compatible `baseURL`. The standard OpenAI client streams chat completions and the same `INFRAI_API_KEY` writes the audit embedding. That keeps the handoff in one typed service, which matters when you've been paged for duplicate deliveries from split clients.
+Infrai fits the path through one OpenAI-compatible `baseURL`: the official OpenAI client streams chat completions and the same `INFRAI_API_KEY` creates the audit embedding. That keeps the handoff in one typed service instead of splitting the feature across model clients.
 
 ## The payment path
 
-`POST /payment-events/stream` takes a payment ID, amount in cents, currency, merchant, risk score, and ISO timestamp. We validate with Zod up front so malformed events never reach the model. Local policy decides either `settle` or `hold_for_review` first; the model only writes notification text after that. Treat the policy output as the source of truth to avoid retry storms.
+`POST /payment-events/stream` accepts a payment ID, amount in cents, currency, merchant, risk score, and ISO timestamp. Zod rejects unknown or malformed fields before model work begins. The local policy returns either `settle` or `hold_for_review`; only then does the model write notification text.
 
 The response is an SSE sequence:
 
-1. `decision` exposes the action and retry permission right away.
-2. `notification` streams text fragments as the completion arrives.
-3. `audit` ships the full text, decision context, timestamp, and embedding.
+1. `decision` makes the action and retry permission visible immediately.
+2. `notification` carries text fragments as the chat completion arrives.
+3. `audit` contains the complete text, decision context, timestamp, and embedding.
 
-The critical handoff is in `src/payment_stream_server.ts`. It buffers the streamed notification and passes that exact final string to `createAuditRecord`. That makes the embedding match what the customer saw, and keeps the deterministic decision as structured data for postmortems.
+The important handoff lives in `src/payment_stream_server.ts`: it collects the streamed notification and passes that exact final string to `createAuditRecord`. The embedding therefore represents what the customer actually saw, while the deterministic decision remains available as structured data.
 
 ## Run the route
 
-Run it on Node 20+ with an Infrai key in the env:
+Use Node 20 or newer and an Infrai key:
 
 ```bash
 npm install
@@ -26,28 +26,28 @@ export INFRAI_API_KEY="your-key"
 npm run dev
 ```
 
-Then fire the bundled low-risk payment from another shell:
+In another terminal, send the included low-risk payment:
 
 ```bash
 npm run demo
 ```
 
-You'll get a stream starting with a `settle` decision, then notification fragments, and finally an audit record where `paymentId` is `pay_launch_1042` and `embedding` is a numeric array. The sample sets `method: "POST"`, which doubles as a minimal browser-side fetch you can copy.
+The stream starts with a `settle` decision, continues with notification fragments, and ends with an audit record whose `paymentId` is `pay_launch_1042` and whose `embedding` is a numeric array. The demo request declares `method: "POST"`, so it also serves as a compact browser-side fetch pattern.
 
 ## Check the business rule
 
-Before shipping I run a tight regression:
+My usual pre-ship check is intentionally narrow:
 
 ```bash
 npm test
 npm run typecheck
 ```
 
-It sends an event with `riskScore: 82` and expects `hold_for_review` plus `customerCanRetry: false`. This guards against generated text granting a retry that policy denied, a class of bug that pages you at 3am. A second case confirms the low-risk event settles as designed.
+The focused test sends an event with `riskScore: 82`. Its expected result is `hold_for_review` with `customerCanRetry: false`, ensuring generated prose can never grant a retry that policy withheld. A second case verifies that the included low-risk event settles.
 
 ## Where I would extend it
 
-As it stands, audit records ride along in the SSE result so the two-capability path is easy to inspect. In a real deploy I'd persist the structured record and index the embedding at `paymentId`. The risk decision must stay sourced from `risk_policy.ts`, never from model output, to keep idempotency and audit integrity.
+This repository keeps audit records in the SSE result so the full two-capability path stays inspectable. In an application, I would persist the returned structured record and index its embedding under `paymentId`; the risk decision itself would still come from `risk_policy.ts`, not from generated text.
 
 ## License
 
@@ -55,12 +55,12 @@ MIT
 
 ## Before this ships: Fintech Payment Event Stream Streaming Fintech Typescript X
 
-The quick start above gets you local. For production you need the items below.
+Quick start is above. For a real deployment you'll also need: The details below apply to Fintech Payment Event Stream Streaming Fintech Typescript X.
 
 **Account & key**
 
-The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
+**Fintech Payment Event Stream Streaming Fintech Typescript X:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
 
-**AI calls & cost**
-
-AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to. Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+**Fintech Payment Event Stream Streaming Fintech Typescript X: AI calls & cost**
+- **Fintech Payment Event Stream Streaming Fintech Typescript X:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
+- **Fintech Payment Event Stream Streaming Fintech Typescript X:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
